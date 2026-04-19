@@ -100,4 +100,31 @@ const loginUser = asyncHandler(async (req, res) => {
     .json(new apiResponse(200, loggedInUser, "Login successful"));
 });
 
-export { registerUser, loginUser };
+const logoutUser = asyncHandler(async (req, res) => {
+  const { refreshToken } = req.cookies;
+
+  if (!refreshToken) {
+    throw new apiError(400, "Refresh token is required");
+  }
+
+  // ✅ Find user by refresh token
+  const user = await User.findOne({ refreshToken });
+
+  if (!user) {
+    throw new apiError(404, "User not found");
+  }
+
+  // ✅ Clear refresh token in DB
+  user.refreshToken = null;
+  await user.save();
+
+  // ✅ Clear cookies
+  res.clearCookie("accessToken", accessTokenOptions);
+  res.clearCookie("refreshToken", refreshTokenOptions);
+
+  return res
+    .status(200)
+    .json(new apiResponse(200, null, "Logout successful"));
+});
+
+export { registerUser, loginUser, logoutUser };
