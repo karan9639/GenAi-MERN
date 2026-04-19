@@ -53,7 +53,6 @@ const registerUser = asyncHandler(async (req, res) => {
 });
 
 const loginUser = asyncHandler(async (req, res) => {
-  console.log("Login request body:", req.body); // Debugging line to check incoming data
   const { email, username, password } = req.body;
 
   if(!email && !username){
