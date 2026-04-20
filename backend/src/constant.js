@@ -1,13 +1,15 @@
-export const DB_NAME = "genai-mern";
+const isProduction = process.env.NODE_ENV === "production";
+
 export const accessTokenOptions = {
   httpOnly: true,
-  secure: true,
-  sameSite: "None",
-  maxAge: 7 * 24 * 60 * 60 * 1000,
+  secure: isProduction,
+  sameSite: isProduction ? "none" : "lax",
+  maxAge: 24 * 60 * 60 * 1000,
 };
+
 export const refreshTokenOptions = {
   httpOnly: true,
-  secure: true,
-  sameSite: "None",
-  maxAge: 28 * 24 * 60 * 60 * 1000,
+  secure: isProduction,
+  sameSite: isProduction ? "none" : "lax",
+  maxAge: 7 * 24 * 60 * 60 * 1000,
 };

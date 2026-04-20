@@ -1,28 +1,36 @@
-import express, {urlencoded} from 'express';
-import dotenv from "dotenv";
+import express from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
-
-dotenv.config({
-    path: "./.env"
-});
+import authRoutes from "./routes/auth.routes.js";
+import interviewRoutes from "./routes/interview.routes.js";
 
 const app = express();
 
-const corsOptions = {
-    origin: process.env.CORS_ORIGIN,
+const allowedOrigins = (process.env.CORS_ORIGIN || "http://localhost:5173")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+app.use(
+  cors({
+    origin: allowedOrigins,
     credentials: true,
-};
+  }),
+);
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+app.use(cookieParser());
+app.use(express.static("public"));
 
-app.use(cors(corsOptions)); // Enable CORS with the specified options
-app.use(express.urlencoded({extended: true})); // To parse URL-encoded data from the request body specially for form submissions
-app.use(express.json()); // To parse JSON data from the request body, which is common for API requests
-app.use(cookieParser()); // To parse cookies from the incoming requests, allowing you to access them via req.cookies in your route handlers
-app.use(express.static("public")); // To serve static files from the "public" directory, allowing you to access them via URLs like http://yourdomain.com/filename.ext
+app.get("/api/v1/health", (_, res) => {
+  res.status(200).json({ success: true, message: "API is healthy" });
+});
 
-import authRoute from "./routes/auth.routes.js";
+app.use("/api/v1/auth", authRoutes);
+app.use("/api/v1/interviews", interviewRoutes);
 
+app.use((_, res) => {
+  res.status(404).json({ success: false, message: "Route not found" });
+});
 
-app.use("/api/v1/auth", authRoute); // Mount the auth routes at the /api/v1/auth path, so all routes defined in auth.routes.js will be prefixed with /api/v1/auth
-
-export {app};
+export { app };

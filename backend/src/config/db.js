@@ -1,14 +1,16 @@
-import mongoose from 'mongoose';
-import { DB_NAME } from '../constant.js';
+import mongoose from "mongoose";
 
-const connectDB=async()=>{
-    try {
-        const connectionInstance=await mongoose.connect(`${process.env.MONGO_URI}/${DB_NAME}`);
-        console.log(`MongoDB Connected !!! Host: ${connectionInstance.connection.host} / ${connectionInstance.connection.name}`);
-    } catch (error) {
-        console.error(`Error: ${error.message}`);
-        process.exit(1);
-    }
-}
+const connectDB = async () => {
+  const mongoUri = process.env.MONGO_URI;
 
-export {connectDB};
+  if (!mongoUri) {
+    throw new Error("MONGO_URI is missing in the backend .env file");
+  }
+
+  const connectionInstance = await mongoose.connect(mongoUri);
+  console.log(
+    `MongoDB connected: ${connectionInstance.connection.host}/${connectionInstance.connection.name}`,
+  );
+};
+
+export { connectDB };

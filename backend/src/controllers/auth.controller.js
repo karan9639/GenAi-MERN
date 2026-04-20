@@ -1,31 +1,37 @@
 import { User } from "../models/user.model.js";
+import { BlackList } from "../models/blacklist.model.js";
 import { apiError } from "../utils/apiError.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { apiResponse } from "../utils/apiResponse.js";
 import { accessTokenOptions, refreshTokenOptions } from "../constant.js";
 
+const sanitizeUser = (user) => {
+  const safeUser = user.toObject ? user.toObject() : { ...user };
+  delete safeUser.password;
+  delete safeUser.refreshToken;
+  delete safeUser.__v;
+  return safeUser;
+};
+
 const registerUser = asyncHandler(async (req, res) => {
   let { fullname, username, email, password, confirmPassword } = req.body;
 
-  // ✅ Trim validation (important)
   if (
     [fullname, username, email, password, confirmPassword].some(
-      (field) => !field?.trim(),
+      (field) => !String(field || "").trim(),
     )
   ) {
     throw new apiError(400, "All fields are required");
   }
 
-  // ✅ Normalize
-  email = email.toLowerCase();
-  username = username.toLowerCase();
-
-  // ✅ Password match check
   if (password !== confirmPassword) {
     throw new apiError(400, "Passwords do not match");
   }
 
-  // ✅ Check existing user
+  email = email.trim().toLowerCase();
+  username = username.trim().toLowerCase();
+  fullname = fullname.trim();
+
   const existedUser = await User.findOne({
     $or: [{ email }, { username }],
   });
@@ -34,7 +40,6 @@ const registerUser = asyncHandler(async (req, res) => {
     throw new apiError(409, "User already exists");
   }
 
-  // ✅ Create user (password hashed automatically via pre-save)
   const user = await User.create({
     fullname,
     username,
@@ -42,82 +47,65 @@ const registerUser = asyncHandler(async (req, res) => {
     password,
   });
 
-  // ✅ Remove sensitive data (no extra DB call)
-  const createdUser = user.toObject();
-  delete createdUser.password;
-  delete createdUser.refreshToken;
-
   return res
     .status(201)
-    .json(new apiResponse(201, createdUser, "User registered successfully"));
+    .json(new apiResponse(201, { user: sanitizeUser(user) }, "User registered successfully"));
 });
 
 const loginUser = asyncHandler(async (req, res) => {
   const { email, username, password } = req.body;
 
-  if(!email && !username){
+  if (!email && !username) {
     throw new apiError(400, "Email or username is required");
   }
-  if(!password){
+
+  if (!password) {
     throw new apiError(400, "Password is required");
   }
 
-  // ✅ Find user by email or username
+  const normalizedEmail = email?.trim().toLowerCase();
+  const normalizedUsername = username?.trim().toLowerCase();
+
   const user = await User.findOne({
-    $or: [{ email: email?.toLowerCase() }, { username: username?.toLowerCase() }],
+    $or: [{ email: normalizedEmail }, { username: normalizedUsername }],
   });
 
   if (!user) {
     throw new apiError(404, "User not found");
   }
 
-  // ✅ Check password
   const isPasswordCorrect = await user.isPasswordCorrect(password);
+
   if (!isPasswordCorrect) {
     throw new apiError(401, "Invalid credentials");
   }
 
-  // ✅ Generate tokens
   const accessToken = user.generateAccessToken();
   const refreshToken = user.generateRefreshToken();
 
-  // ✅ Save refresh token in DB
   user.refreshToken = refreshToken;
-  await user.save();
+  await user.save({ validateBeforeSave: false });
 
-  // ✅ Set cookies
   res.cookie("accessToken", accessToken, accessTokenOptions);
   res.cookie("refreshToken", refreshToken, refreshTokenOptions);
 
-  // ✅ Remove sensitive data
-  const loggedInUser = user.toObject();
-  delete loggedInUser.password;
-  delete loggedInUser.refreshToken;
-
   return res
     .status(200)
-    .json(new apiResponse(200, loggedInUser, "Login successful"));
+    .json(new apiResponse(200, { user: sanitizeUser(user) }, "Login successful"));
 });
 
 const logoutUser = asyncHandler(async (req, res) => {
-  const { refreshToken } = req.cookies;
+  const accessToken = req.cookies?.accessToken || req.header("Authorization")?.replace("Bearer ", "");
+  const refreshToken = req.cookies?.refreshToken;
 
-  if (!refreshToken) {
-    throw new apiError(400, "Refresh token is required");
+  if (refreshToken) {
+    await User.findOneAndUpdate({ refreshToken }, { $unset: { refreshToken: 1 } });
   }
 
-  // ✅ Find user by refresh token
-  const user = await User.findOne({ refreshToken });
-
-  if (!user) {
-    throw new apiError(404, "User not found");
+  if (accessToken) {
+    await BlackList.create({ token: accessToken });
   }
 
-  // ✅ Clear refresh token in DB
-  user.refreshToken = null;
-  await user.save();
-
-  // ✅ Clear cookies
   res.clearCookie("accessToken", accessTokenOptions);
   res.clearCookie("refreshToken", refreshTokenOptions);
 
@@ -126,4 +114,10 @@ const logoutUser = asyncHandler(async (req, res) => {
     .json(new apiResponse(200, null, "Logout successful"));
 });
 
-export { registerUser, loginUser, logoutUser };
+const getCurrentUser = asyncHandler(async (req, res) => {
+  return res
+    .status(200)
+    .json(new apiResponse(200, { user: sanitizeUser(req.user) }, "Current user fetched successfully"));
+});
+
+export { registerUser, loginUser, logoutUser, getCurrentUser };
